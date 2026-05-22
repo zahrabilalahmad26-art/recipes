@@ -1,0 +1,299 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Simple Pocket Garden</title>
+    <style>
+        /* --- BASIC STYLING --- */
+        :root {
+            --green: #4CAF50;
+            --dark-green: #2E7D32;
+            --bg: #f9f9f9;
+            --text: #333;
+            --card-bg: #fff;
+            --danger: #ff5252;
+        }
+
+        body {
+            font-family: sans-serif;
+            background-color: var(--bg);
+            color: var(--text);
+            margin: 0;
+            padding: 20px;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+        }
+
+        h1 { color: var(--dark-green); margin-bottom: 30px; }
+
+        /* --- BUTTONS --- */
+        .btn {
+            padding: 10px 20px;
+            border: none;
+            border-radius: 5px;
+            cursor: pointer;
+            font-size: 16px;
+            color: white;
+            transition: background 0.2s;
+        }
+        .btn-add { background-color: var(--green); position: fixed; bottom: 20px; right: 20px; box-shadow: 0 4px 10px rgba(0,0,0,0.2); font-size: 24px; width: 60px; height: 60px; border-radius: 50%; display: flex; align-items: center; justify-content: center; }
+        .btn-add:hover { background-color: var(--dark-green); }
+        
+        .btn-edit { background-color: #2196F3; margin-right: 5px; font-size: 14px; padding: 5px 10px; }
+        .btn-delete { background-color: var(--danger); font-size: 14px; padding: 5px 10px; }
+        .btn-water { background-color: #03A9F4; width: 100%; margin-top: 10px; }
+
+        /* --- LAYOUT --- */
+        #plant-list {
+            display: grid;
+            grid-template-columns: repeat(auto-fill, minmax(250px, 1fr));
+            gap: 20px;
+            width: 100%;
+            max-width: 800px;
+        }
+
+        /* --- PLANT CARD --- */
+        .card {
+            background: var(--card-bg);
+            border-radius: 10px;
+            padding: 20px;
+            box-shadow: 0 2px 5px rgba(0,0,0,0.1);
+            display: flex;
+            flex-direction: column;
+            justify-content: space-between;
+        }
+        .card h3 { margin: 0 0 5px 0; }
+        .card p { margin: 0; color: #666; font-size: 14px; }
+        .card .last-watered { margin-top: 15px; font-weight: bold; color: #555; }
+        .card-actions { margin-top: 15px; display: flex; justify-content: flex-end; }
+
+        /* --- MODAL (POPUP FORM) --- */
+        .modal {
+            display: none; /* Hidden by default */
+            position: fixed; 
+            top: 0; left: 0; width: 100%; height: 100%;
+            background: rgba(0,0,0,0.5);
+            align-items: center;
+            justify-content: center;
+        }
+        .modal.open { display: flex; }
+
+        .modal-content {
+            background: white;
+            padding: 25px;
+            border-radius: 10px;
+            width: 90%;
+            max-width: 400px;
+        }
+
+        input, select {
+            width: 100%; padding: 10px; margin: 10px 0;
+            border: 1px solid #ddd; border-radius: 5px;
+            box-sizing: border-box; /* Keeps padding inside width */
+        }
+
+        .modal-buttons { display: flex; justify-content: space-between; margin-top: 20px; }
+        .btn-cancel { background-color: #999; }
+    </style>
+</head>
+<body>
+
+    <h1>🌿 My Simple Garden</h1>
+
+    <!-- This is where the plant cards will appear -->
+    <div id="plant-list"></div>
+
+    <!-- Big Floating Button to Add Plant -->
+    <button class="btn btn-add" onclick="openModal()">+</button>
+
+    <!-- THE MODAL (FORM) -->
+    <div id="modal" class="modal">
+        <div class="modal-content">
+            <h2 id="modal-title">Add Plant</h2>
+            <!-- We use a hidden input to store the ID when editing -->
+            <input type="hidden" id="plant-id">
+            
+            <label>Name:</label>
+            <input type="text" id="plant-name" placeholder="e.g. Rose">
+
+            <label>Species:</label>
+            <input type="text" id="plant-species" placeholder="e.g. Flower">
+
+            <label>Water every (days):</label>
+            <select id="plant-freq">
+                <option value="3">3 Days</option>
+                <option value="7" selected>7 Days</option>
+                <option value="14">14 Days</option>
+            </select>
+
+            <div class="modal-buttons">
+                <button class="btn btn-cancel" onclick="closeModal()">Cancel</button>
+                <button class="btn btn-add" style="position:static; width:auto; border-radius:5px; font-size:16px;" onclick="savePlant()">Save</button>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        // --- 1. DATA STORAGE (State) ---
+        // We start with an empty array. We will try to load from LocalStorage later.
+        let plants = [];
+
+        // --- 2. INITIALIZATION ---
+        // When the page loads, run this code
+        window.onload = function() {
+            loadPlants();
+            renderPlants();
+        };
+
+        // --- 3. CORE FUNCTIONS (The Logic) ---
+
+        // LOAD: Get data from browser memory
+        function loadPlants() {
+            const storedData = localStorage.getItem('myGardenData');
+            if (storedData) {
+                plants = JSON.parse(storedData);
+            }
+        }
+
+        // SAVE: Put data into browser memory
+        function saveToStorage() {
+            localStorage.setItem('myGardenData', JSON.stringify(plants));
+            renderPlants(); // Refresh the screen
+        }
+
+        // RENDER: Draw the list on the screen
+        function renderPlants() {
+            const listDiv = document.getElementById('plant-list');
+            listDiv.innerHTML = ""; // Clear the list first
+
+            if (plants.length === 0) {
+                listDiv.innerHTML = "<p style='text-align:center; color:#888; width:100%;'>No plants yet. Click + to add one!</p>";
+                return;
+            }
+
+            // Loop through plants and create a card for each
+            plants.forEach(plant => {
+                // Calculate how many days since watered
+                let daysText = "Never";
+                if(plant.lastWatered) {
+                    const diffTime = Math.abs(new Date() - new Date(plant.lastWatered));
+                    const daysDiff = Math.ceil(diffTime / (1000 * 60 * 60 * 24)); 
+                    daysText = daysDiff + " days ago";
+                }
+
+                // Create the HTML for the card
+                const card = document.createElement('div');
+                card.className = 'card';
+                card.innerHTML = `
+                    <div>
+                        <h3>${plant.name}</h3>
+                        <p>${plant.species}</p>
+                        <p>Water every: ${plant.frequency} days</p>
+                        <div class="last-watered">Last: ${daysText}</div>
+                    </div>
+                    
+                    <button class="btn btn-water" onclick="waterPlant('${plant.id}')">💧 Water Now</button>
+                    
+                    <div class="card-actions">
+                        <button class="btn btn-edit" onclick="editPlant('${plant.id}')">Edit</button>
+                        <button class="btn btn-delete" onclick="deletePlant('${plant.id}')">Remove</button>
+                    </div>
+                `;
+                listDiv.appendChild(card);
+            });
+        }
+
+        // --- 4. ACTIONS (Add, Edit, Delete, Water) ---
+
+        // OPEN MODAL (Clears form for new plant)
+        function openModal() {
+            document.getElementById('modal').classList.add('open');
+            document.getElementById('modal-title').innerText = "Add Plant";
+            document.getElementById('plant-id').value = ""; // Empty ID = New Plant
+            document.getElementById('plant-name').value = "";
+            document.getElementById('plant-species').value = "";
+            document.getElementById('plant-freq').value = "7";
+        }
+
+        // CLOSE MODAL
+        function closeModal() {
+            document.getElementById('modal').classList.remove('open');
+        }
+
+        // SAVE PLANT (Handles both Add and Edit)
+        function savePlant() {
+            const id = document.getElementById('plant-id').value;
+            const name = document.getElementById('plant-name').value;
+            const species = document.getElementById('plant-species').value;
+            const frequency = document.getElementById('plant-freq').value;
+
+            if(!name) {
+                alert("Please enter a plant name!");
+                return;
+            }
+
+            if (id) {
+                // --- EDIT MODE ---
+                // Find the plant in the array and update it
+                const index = plants.findIndex(p => p.id === id);
+                if (index !== -1) {
+                    plants[index].name = name;
+                    plants[index].species = species;
+                    plants[index].frequency = frequency;
+                }
+            } else {
+                // --- ADD MODE ---
+                // Create a new plant object
+                const newPlant = {
+                    id: Date.now().toString(), // Create unique ID based on time
+                    name: name,
+                    species: species,
+                    frequency: frequency,
+                    lastWatered: null
+                };
+                plants.push(newPlant); // Add to array
+            }
+
+            saveToStorage(); // Save to browser and refresh
+            closeModal(); // Close the popup
+        }
+
+        // EDIT PLANT (Prepares the form)
+        function editPlant(id) {
+            const plant = plants.find(p => p.id === id);
+            if (plant) {
+                document.getElementById('modal').classList.add('open');
+                document.getElementById('modal-title').innerText = "Edit Plant";
+                
+                // Fill in the form with existing data
+                document.getElementById('plant-id').value = plant.id;
+                document.getElementById('plant-name').value = plant.name;
+                document.getElementById('plant-species').value = plant.species;
+                document.getElementById('plant-freq').value = plant.frequency;
+            }
+        }
+
+        // DELETE PLANT
+        function deletePlant(id) {
+            if(confirm("Are you sure you want to delete this plant?")) {
+                // Remove the plant from the array
+                plants = plants.filter(p => p.id !== id);
+                saveToStorage();
+            }
+        }
+
+        // WATER PLANT
+        function waterPlant(id) {
+            const plant = plants.find(p => p.id === id);
+            if (plant) {
+                // Update the date to today
+                plant.lastWatered = new Date().toISOString();
+                saveToStorage();
+            }
+        }
+
+    </script>
+</body>
+</html>

@@ -1,0 +1,299 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Simple Recipe Adder</title>
+    <style>
+        /* --- BASIC STYLING --- */
+        :root {
+            --orange: #FF9800;
+            --dark-orange: #F57C00;
+            --bg: #fff3e0; /* Light orange background */
+            --text: #333;
+            --card-bg: #fff;
+            --danger: #ff5252;
+        }
+
+        body {
+            font-family: sans-serif;
+            background-color: var(--bg);
+            color: var(--text);
+            margin: 0;
+            padding: 20px;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+        }
+
+        h1 { color: var(--dark-orange); margin-bottom: 30px; }
+
+        /* --- BUTTONS --- */
+        .btn {
+            padding: 10px 20px;
+            border: none;
+            border-radius: 5px;
+            cursor: pointer;
+            font-size: 16px;
+            color: white;
+            transition: background 0.2s;
+        }
+        
+        /* Floating Add Button */
+        .btn-add { 
+            background-color: var(--orange); 
+            position: fixed; 
+            bottom: 20px; right: 20px; 
+            box-shadow: 0 4px 10px rgba(0,0,0,0.2); 
+            font-size: 24px; 
+            width: 60px; height: 60px; 
+            border-radius: 50%; 
+            display: flex; align-items: center; justify-content: center; 
+        }
+        .btn-add:hover { background-color: var(--dark-orange); }
+        
+        .btn-edit { background-color: #2196F3; margin-right: 5px; font-size: 14px; padding: 5px 10px; }
+        .btn-delete { background-color: var(--danger); font-size: 14px; padding: 5px 10px; }
+        .btn-save { background-color: var(--orange); width: 100%; }
+
+        /* --- LAYOUT --- */
+        #recipe-list {
+            display: grid;
+            grid-template-columns: repeat(auto-fill, minmax(300px, 1fr));
+            gap: 20px;
+            width: 100%;
+            max-width: 900px;
+        }
+
+        /* --- RECIPE CARD --- */
+        .card {
+            background: var(--card-bg);
+            border-radius: 10px;
+            padding: 20px;
+            box-shadow: 0 2px 5px rgba(0,0,0,0.1);
+            display: flex;
+            flex-direction: column;
+            max-height: 500px; /* Limit height */
+            overflow-y: auto;  /* Scroll if text is too long */
+        }
+        
+        .card h3 { margin: 0 0 10px 0; color: var(--dark-orange); border-bottom: 2px solid var(--bg); padding-bottom: 5px;}
+        
+        .card-section { margin-bottom: 15px; }
+        .card-section h4 { margin: 0 0 5px 0; font-size: 14px; color: #888; text-transform: uppercase; }
+        
+        /* This CSS makes the text keep line breaks from the textarea */
+        .recipe-text { 
+            white-space: pre-wrap; 
+            font-size: 14px; 
+            line-height: 1.5;
+        }
+
+        .card-actions { margin-top: auto; padding-top: 15px; display: flex; justify-content: flex-end; }
+
+        /* --- MODAL (POPUP FORM) --- */
+        .modal {
+            display: none; /* Hidden by default */
+            position: fixed; 
+            top: 0; left: 0; width: 100%; height: 100%;
+            background: rgba(0,0,0,0.5);
+            align-items: center;
+            justify-content: center;
+            z-index: 100;
+        }
+        .modal.open { display: flex; }
+
+        .modal-content {
+            background: white;
+            padding: 25px;
+            border-radius: 10px;
+            width: 90%;
+            max-width: 500px;
+            max-height: 90vh;
+            overflow-y: auto;
+        }
+
+        label { font-weight: bold; font-size: 14px; margin-top: 10px; display: block; }
+        
+        input, textarea {
+            width: 100%; 
+            padding: 10px; 
+            margin-top: 5px;
+            border: 1px solid #ddd; 
+            border-radius: 5px;
+            box-sizing: border-box; 
+            font-family: inherit;
+        }
+
+        textarea { height: 100px; resize: vertical; }
+
+        .modal-buttons { display: flex; justify-content: space-between; margin-top: 20px; }
+        .btn-cancel { background-color: #999; }
+    </style>
+</head>
+<body>
+
+    <h1>🍳 My Recipes</h1>
+
+    <!-- This is where the recipe cards will appear -->
+    <div id="recipe-list"></div>
+
+    <!-- Big Floating Button to Add Recipe -->
+    <button class="btn btn-add" onclick="openModal()">+</button>
+
+    <!-- THE MODAL (FORM) -->
+    <div id="modal" class="modal">
+        <div class="modal-content">
+            <h2 id="modal-title">Add Recipe</h2>
+            <!-- Hidden ID to track if we are editing -->
+            <input type="hidden" id="recipe-id">
+            
+            <label>Recipe Title:</label>
+            <input type="text" id="recipe-title" placeholder="e.g. Pancakes">
+
+            <label>Ingredients (One per line):</label>
+            <textarea id="recipe-ingredients" placeholder="1 cup flour&#10;2 eggs&#10;Milk"></textarea>
+
+            <label>Instructions:</label>
+            <textarea id="recipe-instructions" placeholder="Mix all ingredients...&#10;Cook on pan..."></textarea>
+
+            <div class="modal-buttons">
+                <button class="btn btn-cancel" onclick="closeModal()">Cancel</button>
+                <button class="btn btn-save" style="width:auto; border-radius:5px;" onclick="saveRecipe()">Save Recipe</button>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        // --- 1. DATA STORAGE ---
+        let recipes = [];
+
+        // --- 2. INITIALIZATION ---
+        window.onload = function() {
+            loadRecipes();
+            renderRecipes();
+        };
+
+        // --- 3. CORE FUNCTIONS ---
+
+        function loadRecipes() {
+            const storedData = localStorage.getItem('myRecipeData');
+            if (storedData) {
+                recipes = JSON.parse(storedData);
+            }
+        }
+
+        function saveToStorage() {
+            localStorage.setItem('myRecipeData', JSON.stringify(recipes));
+            renderRecipes();
+        }
+
+        function renderRecipes() {
+            const listDiv = document.getElementById('recipe-list');
+            listDiv.innerHTML = ""; // Clear list
+
+            if (recipes.length === 0) {
+                listDiv.innerHTML = "<p style='text-align:center; color:#888; width:100%;'>No recipes yet. Click + to add one!</p>";
+                return;
+            }
+
+            // Loop through recipes
+            recipes.forEach(recipe => {
+                const card = document.createElement('div');
+                card.className = 'card';
+                
+                // We use a template string to build the HTML
+                card.innerHTML = `
+                    <h3>${recipe.title}</h3>
+                    
+                    <div class="card-section">
+                        <h4>Ingredients:</h4>
+                        <div class="recipe-text">${recipe.ingredients}</div>
+                    </div>
+                    
+                    <div class="card-section">
+                        <h4>Instructions:</h4>
+                        <div class="recipe-text">${recipe.instructions}</div>
+                    </div>
+                    
+                    <div class="card-actions">
+                        <button class="btn btn-edit" onclick="editRecipe('${recipe.id}')">Edit</button>
+                        <button class="btn btn-delete" onclick="deleteRecipe('${recipe.id}')">Delete</button>
+                    </div>
+                `;
+                listDiv.appendChild(card);
+            });
+        }
+
+        // --- 4. ACTIONS ---
+
+        function openModal() {
+            document.getElementById('modal').classList.add('open');
+            document.getElementById('modal-title').innerText = "Add Recipe";
+            document.getElementById('recipe-id').value = ""; 
+            document.getElementById('recipe-title').value = "";
+            document.getElementById('recipe-ingredients').value = "";
+            document.getElementById('recipe-instructions').value = "";
+        }
+
+        function closeModal() {
+            document.getElementById('modal').classList.remove('open');
+        }
+
+        function saveRecipe() {
+            const id = document.getElementById('recipe-id').value;
+            const title = document.getElementById('recipe-title').value;
+            const ingredients = document.getElementById('recipe-ingredients').value;
+            const instructions = document.getElementById('recipe-instructions').value;
+
+            if(!title) {
+                alert("Please enter a recipe title!");
+                return;
+            }
+
+            if (id) {
+                // --- EDIT MODE ---
+                const index = recipes.findIndex(r => r.id === id);
+                if (index !== -1) {
+                    recipes[index].title = title;
+                    recipes[index].ingredients = ingredients;
+                    recipes[index].instructions = instructions;
+                }
+            } else {
+                // --- ADD MODE ---
+                const newRecipe = {
+                    id: Date.now().toString(),
+                    title: title,
+                    ingredients: ingredients,
+                    instructions: instructions
+                };
+                recipes.push(newRecipe);
+            }
+
+            saveToStorage();
+            closeModal();
+        }
+
+        function editRecipe(id) {
+            const recipe = recipes.find(r => r.id === id);
+            if (recipe) {
+                document.getElementById('modal').classList.add('open');
+                document.getElementById('modal-title').innerText = "Edit Recipe";
+                
+                document.getElementById('recipe-id').value = recipe.id;
+                document.getElementById('recipe-title').value = recipe.title;
+                document.getElementById('recipe-ingredients').value = recipe.ingredients;
+                document.getElementById('recipe-instructions').value = recipe.instructions;
+            }
+        }
+
+        function deleteRecipe(id) {
+            if(confirm("Are you sure you want to delete this recipe?")) {
+                recipes = recipes.filter(r => r.id !== id);
+                saveToStorage();
+            }
+        }
+
+    </script>
+</body>
+</html>
